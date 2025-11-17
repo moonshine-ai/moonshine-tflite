@@ -28,7 +28,7 @@ def transcribe(audio, model_dir=None, model_name="moonshine/base", model_precisi
     assert_audio_size(audio)
 
     tokens = model.generate(audio)
-    return load_tokenizer().decode_batch(tokens)[0]
+    return load_tokenizer().decode(tokens)
 
 def load_tokenizer():
     tokenizer_file = os.path.join(ASSETS_DIR, "tokenizer.json")
@@ -69,12 +69,12 @@ if __name__ == '__main__':
         audio_filename = sys.argv[1]
 
     if len(sys.argv) < 3:
-        model_name = "moonshine/base"
+        model_name = "base"
     else:
         model_name = sys.argv[2]
 
     if len(sys.argv) < 4:
-        model_dir = None
+        model_dir = "models"
     else:
         model_dir = sys.argv[3]
 

@@ -1,86 +1,107 @@
-from moonshine import load_model
 import os
+import pprint
+import shutil
+
 import tensorflow as tf
 from tensorflow.python.tools import saved_model_utils
+from moonshine import load_model
 
-def save_tfl(keras_model, path, input_names=None, output_names=None):
+from keras.src import tree
+from keras.src.export import ExportArchive
+
+import flatbuffers
+from tflite import Model
+
+
+def load_tflite_model_from_file(model_filename):
+    with open(model_filename, "rb") as file:
+        buffer_data = file.read()
+    model_obj = Model.Model.GetRootAsModel(buffer_data, 0)
+    model = Model.ModelT.InitFromObj(model_obj)
+    return model
+
+
+def save_tflite_model_to_file(model, model_filename):
+    builder = flatbuffers.Builder(1024)
+    model_offset = model.Pack(builder)
+    builder.Finish(model_offset, file_identifier=b"TFL3")
+    model_data = builder.Output()
+    with open(model_filename, "wb") as out_file:
+        out_file.write(model_data)
+
+
+def _make_tensor_spec(x):
+    shape = (None,) + x.shape[1:]
+    return tf.TensorSpec(shape, dtype=x.dtype, name=x.name)
+
+
+def convert_keras_to_tflite(keras_model, path, replace_output_names=False):
     saved_model_path = path.replace(".tfl", ".saved_model")
-    # print(keras_model.summary())
-    # print(keras_model.inputs)
-    # exit(1)
-    keras_model.export(saved_model_path, format="tf")
 
-    tag_set = ["serve"]
-    signature_def_key = 'serving_default'
+    input_signature = tree.map_structure(_make_tensor_spec, keras_model.inputs)
+    if isinstance(input_signature, list) and len(input_signature) > 1:
+        input_signature = [input_signature]
 
-    saved_model = saved_model_utils.read_saved_model(saved_model_path)
-    for meta_graph_def in saved_model.meta_graphs:
-        if meta_graph_def.meta_info_def.tags != tag_set:
-            continue
-        signature_def = meta_graph_def.signature_def[signature_def_key]
+    decorated_fn = tf.function(
+        keras_model.__call__, input_signature=input_signature, autograph=False
+    )
 
-        if input_names is not None:
-            assert len(input_names) == len(signature_def.inputs), (
-                f"input_names ({input_names}, len: {len(input_names)}) must have the same length as the number of inputs ({len(signature_def.inputs)})"
-            )
-        for index, (_, info) in enumerate(signature_def.inputs.items()):
-            input_node_name, input_port = info.name.split(":")
-            if input_names is not None:
-                new_node_name = input_names[index]
-            else:
-                new_node_name = f"input_{int(index):03d}"
-            for node in meta_graph_def.graph_def.node:
-                if node.name == input_node_name:
-                    node.name = new_node_name
-                for i, input in enumerate(node.input):
-                    if input == input_node_name:
-                        node.input[i] = f"{new_node_name}:{input_port}"
-                        break                    
-            info.name = f"{new_node_name}:{input_port}"
+    export_archive = ExportArchive()
+    export_archive.track(keras_model)
+    export_archive.add_endpoint("serve", decorated_fn, input_signature)
+    export_archive.write_out(saved_model_path, verbose=True)
 
-        if output_names is not None:
-            assert len(output_names) == len(signature_def.outputs), (
-                "output_names must have the same length as the number of outputs"
-            )
-        for index, (_, info) in enumerate(signature_def.outputs.items()):
-            output_node_name, output_node_index = info.name.split(":")
-            if output_names is not None:
-                new_node_name = output_names[index]
-            else:
-                new_node_name = f"output_{int(index):03d}"
-            meta_graph_def.graph_def.node.extend([
-                tf.compat.v1.NodeDef(
-                    name=new_node_name, op="Identity", 
-                    input=[output_node_name + ":" + str(output_node_index)], 
-                    attr={"T": tf.compat.v1.AttrValue(type=info.dtype)},
-                    device="")
-            ])
-            info.name = f"{new_node_name}:0"
-            
-            # for node in meta_graph_def.graph_def.node:
-            #     print(f"Node: {node.name}, {node.op}, {node.input}, {node.attr["T"]}")
-            # exit(0)
-            
-    saved_model_pb_path = os.path.join(saved_model_path, "saved_model.pb")
-
-    # Preserve the original meta graph for debugging purposes.
-    original_model_pb_path = os.path.join(saved_model_path, "saved_model_original.pb")
-    if os.path.exists(original_model_pb_path):
-        os.remove(original_model_pb_path)
-    os.rename(saved_model_pb_path, original_model_pb_path)
-    
-    with open(saved_model_pb_path, "wb") as file:
-        file.write(saved_model.SerializeToString())
-        
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_path)
-    tflite_model = converter.convert()
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, 'wb') as f:
-        f.write(tflite_model)
+    original_tflite_model = converter.convert()
 
-# for model_name in ["tiny", "base"]:
-for model_name in ["tiny"]:
-    
+    shutil.rmtree(saved_model_path)
+
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    original_path = path.replace(".tfl", ".original.tfl")
+
+    with open(original_path, "wb") as f:
+        f.write(original_tflite_model)
+
+    modified_tflite_model = load_tflite_model_from_file(original_path)
+    signature_def = modified_tflite_model.signatureDefs[0]
+    subgraph = modified_tflite_model.subgraphs[0]
+    if replace_output_names:
+        for index, output_tensor in enumerate(keras_model.outputs):
+            original_output_key = f"output_{index}"
+            found = False
+            for output_map_entry in signature_def.outputs:
+                entry_name_str = output_map_entry.name.decode("utf-8")
+                if entry_name_str == original_output_key:
+                    output_map_entry.name = output_tensor.name.encode("utf-8")
+                    tensor = subgraph.tensors[output_map_entry.tensorIndex]
+                    tensor.name = output_tensor.name.encode("utf-8")
+                    found = True
+                    break
+            if not found:
+                print(
+                    f"Output map entry '{original_output_key}' not found in {[(output_map_entry.name.decode('utf-8'), output_map_entry.tensorIndex) for output_map_entry in signature_def.outputs]}"
+                )
+                exit(1)
+    else:
+        for output_map_entry in signature_def.outputs:
+            entry_name_str = output_map_entry.name
+            tensor = subgraph.tensors[output_map_entry.tensorIndex]
+            tensor.name = entry_name_str
+
+    for input_map_entry in signature_def.inputs:
+        entry_name_str = input_map_entry.name.decode("utf-8")
+        if entry_name_str.startswith("serving_default_"):
+            entry_name_str = entry_name_str.split("serving_default_")[1]
+            entry_name_str = entry_name_str.split(":")[0]
+        tensor = subgraph.tensors[input_map_entry.tensorIndex]
+        tensor.name = entry_name_str.encode("utf-8")
+
+    os.remove(original_path)
+
+    save_tflite_model_to_file(modified_tflite_model, path)
+
+
+for model_name in ["tiny", "base"]:
     model = load_model(f"moonshine/{model_name}")
 
     precision = "float"
@@ -96,35 +117,19 @@ for model_name in ["tiny"]:
     elif model_name == "base":
         layer_count = 8
 
-    decoder_uncached_input_names = [
-        "tokens",
-        "audio_features",
-        "seq_len",
-    ]
+    model_dir = os.path.join("models", model_name, precision)
 
-    decoder_cached_input_names = decoder_uncached_input_names.copy()
-    for index in range(layer_count):
-        decoder_cached_input_names.append(f"input_cache_k_{index}")
-        decoder_cached_input_names.append(f"input_cache_v_{index}")
-        decoder_cached_input_names.append(f"input_x_attn_cache_k_{index}")
-        decoder_cached_input_names.append(f"input_x_attn_cache_v_{index}")
-
-    decoder_output_names = ["logits"]
-    for index in range(layer_count):
-        decoder_output_names.append(f"output_cache_k_{index}")
-        decoder_output_names.append(f"output_cache_v_{index}")
-        decoder_output_names.append(f"output_x_attn_cache_k_{index}")
-        decoder_output_names.append(f"output_x_attn_cache_v_{index}")
-        
-    save_tfl(preprocessor_keras, os.path.join(model_name, precision, "preprocessor.tfl"))
-    save_tfl(encoder_keras, os.path.join(model_name, precision, "encoder.tfl"))
-    save_tfl(
-        decoder_uncached_keras, 
-        os.path.join(model_name, precision, "decoder_initial.tfl"),
-        input_names=decoder_uncached_input_names, 
-        output_names=decoder_output_names)
-    save_tfl(
-        decoder_cached_keras, 
-        os.path.join(model_name, precision, "decoder.tfl"),
-        input_names=decoder_cached_input_names, 
-        output_names=decoder_output_names)
+    convert_keras_to_tflite(
+        preprocessor_keras, os.path.join(model_dir, "preprocessor.tfl"),
+    )
+    convert_keras_to_tflite(encoder_keras, os.path.join(model_dir, "encoder.tfl"))
+    convert_keras_to_tflite(
+        decoder_uncached_keras,
+        os.path.join(model_dir, "decoder_initial.tfl"),
+        replace_output_names=True,
+    )
+    convert_keras_to_tflite(
+        decoder_cached_keras,
+        os.path.join(model_dir, "decoder.tfl"),
+        replace_output_names=True,
+    )
