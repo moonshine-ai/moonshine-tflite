@@ -1,0 +1,3 @@
+# Requirements to run the transcribe.py script.
+ai_edge_litert==1.3.0
+numpy

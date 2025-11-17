@@ -1,0 +1,10 @@
+# Only needed if you want to convert the models from Keras to TFLite, rather
+# than use the pre-converted models in the `models` folder.
+ai_edge_litert==1.3.0
+numpy
+tensorflow
+librosa
+tokenizers
+flatbuffers
+keras
+useful-moonshine@git+https://git@github.com/moonshine-ai/moonshine.git
