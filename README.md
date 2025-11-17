@@ -1,6 +1,6 @@
 # Moonshine TFLite
 
-TensorFlow Lite port of Moonshine speech to text models
+[Moonshine's speech to text models](https://github.com/moonshine-ai/moonshine) converted to the TensorFlow Lite (aka LiteRT) framework.
 
 ## Running Moonshine using TensorFlow Lite
 
