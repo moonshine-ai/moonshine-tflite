@@ -61,27 +61,20 @@ def benchmark(audio, model_dir=None, model_name="moonshine/base", model_precisio
 if __name__ == '__main__':
 
     import tokenizers
-    import sys
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--audio", type=str, default=os.path.join(ASSETS_DIR, "beckett.wav"))
+    parser.add_argument("--model-name", type=str, default="base")
+    parser.add_argument("--model-dir", type=str, default="models")
+    parser.add_argument("--model-precision", type=str, default="float")
+    parser.add_argument("--benchmark", action="store_true")
+    args = parser.parse_args()
 
-    if len(sys.argv) < 2:
-        audio_filename = os.path.join(ASSETS_DIR, "beckett.wav")
-    else:
-        audio_filename = sys.argv[1]
+    audio = load_audio(args.audio)
 
-    if len(sys.argv) < 3:
-        model_name = "base"
-    else:
-        model_name = sys.argv[2]
-
-    if len(sys.argv) < 4:
-        model_dir = "models"
-    else:
-        model_dir = sys.argv[3]
-
-    audio = load_audio(audio_filename)
-
-    text = transcribe(audio, model_name=model_name, model_dir=model_dir, model_precision="float")
+    text = transcribe(audio, model_name=args.model_name, model_dir=args.model_dir, model_precision=args.model_precision)
     print(text)
     
-    benchmark(audio, model_name=model_name, model_dir=model_dir, model_precision="float")
+    if args.benchmark:
+        benchmark(audio, model_name=args.model_name, model_dir=args.model_dir, model_precision=args.model_precision)
     

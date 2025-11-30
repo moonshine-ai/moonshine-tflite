@@ -9,13 +9,15 @@ pip install -r requirements.txt
 python transcribe.py
 ```
 
-The `transcribe.py` script gives an example of how to run speech recognition in Python using the TFLite interpreter. This repository already includes TFLite versions of the Moonshine models in the `models` folder and it uses those by default. The script uses the class definition in `model.py`, and takes three optional arguments:
+The `transcribe.py` script gives an example of how to run speech recognition in Python using the TFLite interpreter. This repository already includes TFLite versions of the Moonshine models in the `models` folder and it uses those by default. The script uses the class definition in `model.py`, and takes four optional arguments:
 
-- The path to a WAV file containing audio that you want to convert into text. This defaults to `assets/beckett.wav` if not specified.
+- `--audio`: The path to a WAV file containing audio that you want to convert into text. This defaults to `assets/beckett.wav` if not specified.
 
-- The name of the model architecture to use, either `tiny` or `base`. Defaults. to `base`.
+- `--model-name`: The name of the model architecture to use, either `tiny` or `base`. Defaults. to `base`.
 
-- Path to a folder containing the four model files necessary for inference. If none is specified, defaults to `models` and loads the model files in this repository.
+- `--model-dir`: Path to a folder containing the four model files necessary for inference. If none is specified, defaults to `models` and loads the model files in this repository.
+
+- `--benchmark`: Run a benchmark to provide latency information.
 
 ## Model Files
 
