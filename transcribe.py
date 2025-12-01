@@ -25,10 +25,10 @@ def assert_audio_size(audio):
 
 
 def transcribe(
-    audio, model_dir=None, model_name="moonshine/base", model_precision="float"
+    audio, model_dir=None, model_name="moonshine/base", model_precision="float", num_threads=None
 ):
     model = MoonshineTFLiteModel(
-        model_dir=model_dir, model_name=model_name, model_precision=model_precision
+        model_dir=model_dir, model_name=model_name, model_precision=model_precision, num_threads=num_threads
     )
     audio = load_audio(audio)
     assert_audio_size(audio)
@@ -44,12 +44,12 @@ def load_tokenizer():
 
 
 def benchmark(
-    audio, model_dir=None, model_name="moonshine/base", model_precision="float"
+    audio, model_dir=None, model_name="moonshine/base", model_precision="float", num_threads=None
 ):
     import time
 
     model = MoonshineTFLiteModel(
-        model_dir=model_dir, model_name=model_name, model_precision=model_precision
+        model_dir=model_dir, model_name=model_name, model_precision=model_precision, num_threads=num_threads
     )
     audio = load_audio(audio)
     num_seconds = assert_audio_size(audio)
@@ -85,6 +85,7 @@ if __name__ == "__main__":
         "--model-precision", type=str, default="float", choices=["float", "quantized"]
     )
     parser.add_argument("--benchmark", action="store_true")
+    parser.add_argument("--num-threads", type=int, default=None)
     args = parser.parse_args()
 
     audio = load_audio(args.audio)
@@ -94,6 +95,7 @@ if __name__ == "__main__":
         model_name=args.model_name,
         model_dir=args.model_dir,
         model_precision=args.model_precision,
+        num_threads=args.num_threads,
     )
     print(text)
 
@@ -103,4 +105,5 @@ if __name__ == "__main__":
             model_name=args.model_name,
             model_dir=args.model_dir,
             model_precision=args.model_precision,
+            num_threads=args.num_threads,
         )

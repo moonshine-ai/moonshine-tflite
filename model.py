@@ -7,7 +7,7 @@ MOONSHINE_TOKEN_END = 2
 
 
 class MoonshineTFLiteModel(object):
-    def __init__(self, model_dir="models", model_name="base", model_precision="float"):
+    def __init__(self, model_dir="models", model_name="base", model_precision="float", num_threads=None):
         self.model_name = model_name
 
         assert self.model_name in ["tiny", "base"]
@@ -23,19 +23,19 @@ class MoonshineTFLiteModel(object):
 
         self.preprocessor = tflite.Interpreter(
             preprocessor,
-            # experimental_op_resolver_type=tflite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES,
+            num_threads=num_threads,
         )
         self.encoder = tflite.Interpreter(
             encoder,
-            # experimental_op_resolver_type=tflite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES,
+            num_threads=num_threads,
         )
         self.decoder_initial = tflite.Interpreter(
             decoder_initial,
-            # experimental_op_resolver_type=tflite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES,
+            num_threads=num_threads,
         )
         self.decoder = tflite.Interpreter(
             decoder,
-            # experimental_op_resolver_type=tf.lite.experimental.OpResolverType.BUILTIN_WITHOUT_DEFAULT_DELEGATES,
+            num_threads=num_threads,
         )
 
         self.preprocessor.allocate_tensors()
