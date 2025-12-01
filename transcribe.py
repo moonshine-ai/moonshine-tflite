@@ -4,6 +4,7 @@ from model import MoonshineTFLiteModel
 
 ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 
+
 def load_audio(audio):
     if isinstance(audio, str):
         import librosa
@@ -12,6 +13,7 @@ def load_audio(audio):
         return audio[None, ...]
     else:
         return audio
+
 
 def assert_audio_size(audio):
     assert len(audio.shape) == 2, "audio should be of shape [batch, samples]"
@@ -22,23 +24,33 @@ def assert_audio_size(audio):
     return num_seconds
 
 
-def transcribe(audio, model_dir=None, model_name="moonshine/base", model_precision="float"):
-    model = MoonshineTFLiteModel(model_dir=model_dir, model_name=model_name, model_precision=model_precision)
+def transcribe(
+    audio, model_dir=None, model_name="moonshine/base", model_precision="float"
+):
+    model = MoonshineTFLiteModel(
+        model_dir=model_dir, model_name=model_name, model_precision=model_precision
+    )
     audio = load_audio(audio)
     assert_audio_size(audio)
 
     tokens = model.generate(audio)
     return load_tokenizer().decode(tokens)
 
+
 def load_tokenizer():
     tokenizer_file = os.path.join(ASSETS_DIR, "tokenizer.json")
     tokenizer = tokenizers.Tokenizer.from_file(str(tokenizer_file))
     return tokenizer
 
-def benchmark(audio, model_dir=None, model_name="moonshine/base", model_precision="float"):
+
+def benchmark(
+    audio, model_dir=None, model_name="moonshine/base", model_precision="float"
+):
     import time
 
-    model = MoonshineTFLiteModel(model_dir=model_dir, model_name=model_name, model_precision=model_precision)
+    model = MoonshineTFLiteModel(
+        model_dir=model_dir, model_name=model_name, model_precision=model_precision
+    )
     audio = load_audio(audio)
     num_seconds = assert_audio_size(audio)
 
@@ -58,23 +70,37 @@ def benchmark(audio, model_dir=None, model_name="moonshine/base", model_precisio
 
     print(f"Time to transcribe {num_seconds:.2f}s of speech is {elapsed_time:.2f}ms")
 
-if __name__ == '__main__':
 
+if __name__ == "__main__":
     import tokenizers
     import argparse
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--audio", type=str, default=os.path.join(ASSETS_DIR, "beckett.wav"))
+    parser.add_argument(
+        "--audio", type=str, default=os.path.join(ASSETS_DIR, "beckett.wav")
+    )
     parser.add_argument("--model-name", type=str, default="base")
     parser.add_argument("--model-dir", type=str, default="models")
-    parser.add_argument("--model-precision", type=str, default="float")
+    parser.add_argument(
+        "--model-precision", type=str, default="float", choices=["float", "quantized"]
+    )
     parser.add_argument("--benchmark", action="store_true")
     args = parser.parse_args()
 
     audio = load_audio(args.audio)
 
-    text = transcribe(audio, model_name=args.model_name, model_dir=args.model_dir, model_precision=args.model_precision)
+    text = transcribe(
+        audio,
+        model_name=args.model_name,
+        model_dir=args.model_dir,
+        model_precision=args.model_precision,
+    )
     print(text)
-    
+
     if args.benchmark:
-        benchmark(audio, model_name=args.model_name, model_dir=args.model_dir, model_precision=args.model_precision)
-    
+        benchmark(
+            audio,
+            model_name=args.model_name,
+            model_dir=args.model_dir,
+            model_precision=args.model_precision,
+        )

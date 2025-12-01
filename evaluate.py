@@ -43,7 +43,7 @@ def process_dataset(
         audio_input = audio[np.newaxis, :].astype(np.float32)
 
         tokens = model.generate(audio_input)
-        predicted_text = tokenizer.decode_batch(tokens)[0]
+        predicted_text = tokenizer.decode(tokens)
 
         expected_texts.append(" " + example["text"])
         predicted_texts.append(" " + predicted_text)
@@ -62,21 +62,30 @@ def parse_arguments() -> argparse.Namespace:
         description="Word Error Rate test for Moonshine models with Librispeech ASR",
     )
     parser.add_argument(
-        "--model_name",
+        "--model-name",
+        type=str,
         help="Model to run the WER test with",
-        default="moonshine/tiny",
-        choices=["moonshine/base", "moonshine/tiny"],
+        default="base",
+        choices=["tiny", "base"],
     )
     parser.add_argument(
-        "--models_dir",
+        "--model-precision",
+        type=str,
+        help="Model precision to run the WER test with",
+        default="float",
+        choices=["float", "quantized"],
+    )
+    parser.add_argument(
+        "--models-dir",
         help="Folder containing local model files",
-        default=None,
+        default="models",
+        type=str,
     )
     result = parser.parse_args()
     return result
 
 if __name__ == "__main__":
     args = parse_arguments()
-    wer_result = calculate_wer(args.model_name, args.models_dir)
+    wer_result = calculate_wer(args.model_name, args.models_dir, args.model_precision)
     print(f"\n  Model:  {args.model_name} {args.models_dir}")
     print(f"    WER:  {100. * wer_result:.2f}%  using OpenAI Whisper EnglishTextNormalizer")

@@ -35,7 +35,9 @@ def _make_tensor_spec(x):
     return tf.TensorSpec(shape, dtype=x.dtype, name=x.name)
 
 
-def convert_keras_to_tflite(keras_model, path, replace_output_names=False):
+def convert_keras_to_tflite(
+    keras_model, path, replace_output_names=False, quantize=False
+):
     saved_model_path = path.replace(".tfl", ".saved_model")
 
     input_signature = tree.map_structure(_make_tensor_spec, keras_model.inputs)
@@ -52,6 +54,8 @@ def convert_keras_to_tflite(keras_model, path, replace_output_names=False):
     export_archive.write_out(saved_model_path, verbose=True)
 
     converter = tf.lite.TFLiteConverter.from_saved_model(saved_model_path)
+    if quantize:
+        converter.optimizations = [tf.lite.Optimize.DEFAULT]
     original_tflite_model = converter.convert()
 
     shutil.rmtree(saved_model_path)
@@ -102,34 +106,45 @@ def convert_keras_to_tflite(keras_model, path, replace_output_names=False):
 
 
 for model_name in ["tiny", "base"]:
-    model = load_model(f"moonshine/{model_name}")
+    for quantize in [True, False]:
+        model = load_model(f"moonshine/{model_name}")
 
-    precision = "float"
+        if quantize:
+            precision = "quantized"
+        else:
+            precision = "float"
 
-    preprocessor_keras = model.preprocessor.preprocess
-    encoder_keras = model.encoder.encoder
-    decoder_uncached_keras = model.decoder.uncached_call
-    decoder_cached_keras = model.decoder.cached_call
+        preprocessor_keras = model.preprocessor.preprocess
+        encoder_keras = model.encoder.encoder
+        decoder_uncached_keras = model.decoder.uncached_call
+        decoder_cached_keras = model.decoder.cached_call
 
-    assert model_name in ["tiny", "base"]
-    if model_name == "tiny":
-        layer_count = 6
-    elif model_name == "base":
-        layer_count = 8
+        assert model_name in ["tiny", "base"]
+        if model_name == "tiny":
+            layer_count = 6
+        elif model_name == "base":
+            layer_count = 8
 
-    model_dir = os.path.join("models", model_name, precision)
+        model_dir = os.path.join("models", model_name, precision)
 
-    convert_keras_to_tflite(
-        preprocessor_keras, os.path.join(model_dir, "preprocessor.tfl"),
-    )
-    convert_keras_to_tflite(encoder_keras, os.path.join(model_dir, "encoder.tfl"))
-    convert_keras_to_tflite(
-        decoder_uncached_keras,
-        os.path.join(model_dir, "decoder_initial.tfl"),
-        replace_output_names=True,
-    )
-    convert_keras_to_tflite(
-        decoder_cached_keras,
-        os.path.join(model_dir, "decoder.tfl"),
-        replace_output_names=True,
-    )
+        # Never quantize the preprocessor since it needs to operate on 16-bit input data.
+        convert_keras_to_tflite(
+            preprocessor_keras,
+            os.path.join(model_dir, "preprocessor.tfl"),
+            quantize=False,
+        )
+        convert_keras_to_tflite(
+            encoder_keras, os.path.join(model_dir, "encoder.tfl"), quantize=quantize
+        )
+        convert_keras_to_tflite(
+            decoder_uncached_keras,
+            os.path.join(model_dir, "decoder_initial.tfl"),
+            replace_output_names=True,
+            quantize=quantize,
+        )
+        convert_keras_to_tflite(
+            decoder_cached_keras,
+            os.path.join(model_dir, "decoder.tfl"),
+            replace_output_names=True,
+            quantize=quantize,
+        )
